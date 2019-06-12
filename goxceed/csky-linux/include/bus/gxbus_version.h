@@ -1,0 +1,10 @@
+#ifndef GXBUS_VERSION_H
+#define GXBUS_VERSION_H
+
+#define GXBUS_MAJOR_VERSION 1
+#define GXBUS_MINOR_VERSION 0
+#define GXBUS_SUB_VERSION   1
+#define GXBUS_PATCH_LEVEL   5
+
+#endif
+

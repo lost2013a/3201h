@@ -1,0 +1,748 @@
+/*****************************************************************************
+* 						   CONFIDENTIAL								
+*        Hangzhou GuoXin Science and Technology Co., Ltd.             
+*                      (C)2008, All right reserved
+******************************************************************************
+
+******************************************************************************
+* @file	        program_manage_sqlite.h
+* @author       zhangling
+* Project   :	 
+* Type      :	
+******************************************************************************
+* Purpose   :	模块实现文件
+******************************************************************************
+* Release History:
+  VERSION	Date			  AUTHOR         Description
+   0.0  	2008.09.01	      zhangling            creation
+*****************************************************************************/
+#ifndef __GXPROGRAM_MANAGE_SQLITE_H__
+#define __GXPROGRAM_MANAGE_SQLITE_H__
+
+#include "gxtype.h"
+
+#ifdef __cplusplus
+extern "C" {
+
+#endif				/*  */
+
+/**说明：不同的tp集合可能属于不同的信道 比如卫星的双
+*tuner方案 而多tuner应该是以tp集合为单位管理方便
+*所以这个结构用于表明tp结合属于哪一个tuner,
+*这个参数当锁频的时候用于确认操作哪个tuner,1-tuner1 2-tuner2.....
+*/
+	typedef uint32_t GxBusPmDataSatTuner;
+
+/*以下几个宏定义可以改为变量的形式,在初始化数据库的时候传入,
+问题在于如何控制传入的值的合法性???如果用户随便乱传 会出现问题*/
+#define MAX_SAT_COUNT      (100)	///<方案最多能容纳的sat数量
+#define MAX_TP_COUNT       (4000)	///<方案最多能容纳的tp数量
+#define MAX_PROG_COUNT     (5000)	///<方案最多能容纳的prog数量
+#define MAX_PROG_PER_TP	   (300)	///<方案每个tp最多能容纳的prog数量
+/****************************************************************/
+#define MAX_SAT_NAME       (16)
+#define MAX_PROG_NAME      (16)
+#define MAX_FAV_GROUP_NAME (16)
+#define MAX_CAS_NAME       (16)
+#define MAX_CA_SYSTEM      (16)
+#define CAS_ID_FREE		(0x1fff)
+#define CAS_ID_UNKNOW	(0x1ffe)
+//#define GXCORE_SUCCESS           (0)
+//#define GXCORE_ERROR        (1)
+
+#define GX_PM_DBASE_FULL (0x7fffffff)
+
+#define GX_PM_MAX_PROG_URL_SIZE (256)
+/* Exported Types --------------------------------------------------------- */
+
+/**说明：数据库数据的类型
+*如需扩展要在这里增加新的类型
+*/
+	typedef enum { GXBUS_PM_DATA_SAT = 0,	///<卫星信息
+		GXBUS_PM_DATA_TP,	///<Tp信息
+		GXBUS_PM_DATA_PROG,	///<节目信息
+	} GxBusPmDataQueryType;
+
+/**说明：要考虑到各种已知方案的共用 所以配合c和t抽象出了
+*卫星的概念
+*/
+	typedef enum { GXBUS_PM_SAT_S = 0,	///< s的tp集合，这种类型的tp集合就是一颗卫星
+		GXBUS_PM_SAT_C,	///< c的tp集合，
+		GXBUS_PM_SAT_T,	///< t的tp集合
+	} GxBusPmDataSatType;
+
+/**卫星经度的描述枚举
+*/
+	typedef enum { GXBUS_PM_SAT_LONGITUDE_DIRECT_EAST = 0,	///<东经
+		GXBUS_PM_SAT_LONGITUDE_DIRECT_WEST,	///<西经
+	} GxBusPmDataSatLongitudeDirect;
+
+/**卫星lnb power
+*/
+	typedef enum { GXBUS_PM_SAT_LNB_POWER_OFF = 0,	///<不供电
+		GXBUS_PM_SAT_LNB_POWER_ON,	///<供电
+		GXBUS_PM_SAT_LNB_POWER_13V,	///<供13v电
+		GXBUS_PM_SAT_LNB_POWER_18V,	///<供18v电
+	} GxBusPmSatLnbPower;
+
+/**LNB 类型
+*/
+	typedef enum { GXBUS_PM_SAT_LNB_UNIVERSAL_1 = 0,	///<9750/10600
+		GXBUS_PM_SAT_LNB_UNIVERSAL_2,	///<9750/10700
+		GXBUS_PM_SAT_LNB_UNIVERSAL_3,	///<9750/10750
+		GXBUS_PM_SAT_LNB_UNIVERSAL_4,	///<9750/11300
+		GXBUS_PM_SAT_LNB_OCS_1,	///<5150/5700
+		GXBUS_PM_SAT_LNB_OCS_2,	///<5150/5750
+		GXBUS_PM_SAT_LNB_USER,	///<"5150","5700","5750","9750","10000","10600","10700","10750","11250","11300"
+	} GxBusPmSatLnbType;
+
+/**卫星22k开关
+*/
+	typedef enum { GXBUS_PM_SAT_22K_OFF = 0,	///<22k关
+		GXBUS_PM_SAT_22K_ON,	///<22k开
+	} GxBusPmSat22kSwitch;
+
+/**卫星12v开关
+*/
+	typedef enum { GXBUS_PM_SAT_12V_OFF = 0,	///<12v关
+		GXBUS_PM_SAT_12V_ON,	///<12v开
+	} GxBusPmSat12vSwitch;
+
+/**卫星diseq版本
+*/
+	typedef enum { GXBUS_PM_SAT_DISEQC_OFF = 0,	///<不使用diseqc
+		GXBUS_PM_SAT_DISEQC_1_0,	///<diseqc1.0
+		GXBUS_PM_SAT_DISEQC_1_1,	///<diseqc1.1
+		GXBUS_PM_SAT_DISEQC_1_2,	///<diseqc1.2
+		GXBUS_PM_SAT_DISEQC_USALS,	///<diseqc USALS
+		GXBUS_PM_SAT_DISEQC_2_0,	///<diseqc2.0
+	} GxBusPmSatDiseqcVersion;
+
+/**卫星diseq1.0位置
+*/
+	typedef enum { GXBUS_PM_SAT_DISEQC1_0_OFF = 0,	///<不使用diseqc1.0
+		GXBUS_PM_SAT_DISEQC1_0_1,	///<diseqc1.0 位置1
+		GXBUS_PM_SAT_DISEQC1_0_2,	///<diseqc1.0 位置2
+		GXBUS_PM_SAT_DISEQC1_0_3,	///<diseqc1.0 位置3
+		GXBUS_PM_SAT_DISEQC1_0_4,	///<diseqc1.0 位置4
+		GXBUS_PM_SAT_DISEQC1_0_A,	///<diseqc1.0 miniA
+		GXBUS_PM_SAT_DISEQC1_0_B,	///<diseqc1.0 miniB
+	} GxBusPmSatDiseqc10;
+
+/**s方案使用的卫星参数
+*/
+	typedef struct {
+
+		/*4B */
+		uint32_t lnb1:14;	/*LNB Frequence. */
+		uint32_t lnb2:14;	/*LNB Frequence. */
+		GxBusPmSatLnbPower lnb_power:2;
+		GxBusPmSat22kSwitch switch_22K:2;	/*22K switcher. */
+
+		/*4B */
+		uint32_t diseqc11:8;	/*0-OFF 1 ... 16 */
+		uint32_t diseqc12_pos:8;	/*Record sign whitch associates satellite'position in DiSEqC device. 0 is default position. */
+		GxBusPmSatDiseqcVersion diseqc_version:4;	/*Off,DiSEqC1.0, DiSEqC1.1, DiSEqC1.2, USALS, DiSEqC2.0 */
+		GxBusPmSatDiseqc10 diseqc10:4;	/*OFF , 1, 2, 3, 4, mini A, mini B */
+		GxBusPmSatLnbType lnb_type:4;	/*Standard, Universal 1, Wideband, User */
+		GxBusPmSat12vSwitch switch_12V:1;
+		GxBusPmDataSatLongitudeDirect longitude_direct:1;	/*Longitude direction: 0 east/1 west */
+		uint32_t reserved:2;
+
+		/*4*4B */
+		uint8_t sat_name[MAX_SAT_NAME];
+
+		/*4B */
+		uint32_t longitude;	/*具体的经度度数 */
+	} GxBusPmSat_s;
+
+/**c方案中卫星的参数,
+*在这个结构体中的参数应该是
+*对于所有属于这个tp集合的tp都起作用的参数
+*/
+	typedef struct {
+		uint8_t reserved;
+	} GxBusPmSat_c;
+
+/**t方案中卫星的参数,
+*在这个结构体中的参数应该是
+*对于所有属于这个tp集合的tp都起作用的参数
+*/
+	typedef struct {
+		uint8_t reserved;
+	} GxBusPmSat_t;
+
+/**该结构是每个tp集合的属性结构体，
+*对于卫星方案来说这就是一个卫星node，
+*在这个结构体中的参数应该是对于所有属于这个tp集合的tp都起作用的参数，
+*比如卫星中的本振,用户得到的卫星参数就是以下结构体
+*/
+	typedef struct {
+		uint32_t id;	///<该tp集合的id
+		GxBusPmDataSatType type;	///<tp集合的类型，指明该集合属于s还是c，或者t
+		GxBusPmDataSatTuner tuner;	///<该tp集合属于哪个tuner
+		union {
+			GxBusPmSat_s sat_s;
+			GxBusPmSat_c sat_c;
+			GxBusPmSat_t sat_t;
+		};
+	} GxBusPmDataSat;
+
+/**卫星方案tp 极化方向
+*/
+	enum { GXBUS_PM_TP_POLAR_H = 0,	///<极化方向h
+		GXBUS_PM_TP_POLAR_V,	///<极化方向v
+	};
+
+/**s方案中tp的参数
+*/
+	typedef struct {
+		uint16_t symbol_rate;	///<符号率
+		uint16_t polar;	///<极化方向
+	} GxBusPmTp_s;
+
+/**c方案中tp的参数
+*/
+	typedef struct {
+		uint16_t symbol_rate;	///< 符号率
+		uint8_t modulation;	///<调制方式 参看fe_modulation_t
+		uint8_t reserved;	///<保留位
+	} GxBusPmTp_c;
+
+/**t方案中tp的参数
+*/
+	typedef struct {
+		uint8_t reserved;
+	} GxBusPmTp_t;
+
+/**该结构是每个tp的属性结构体,需要通过sat_id
+确认该tp属于的tp集合的属性，而后选择相应的公用体内容
+用户得到的tp参数就是以下结构体
+*/
+	typedef struct {
+		uint32_t id;	///<该tp的id
+		uint32_t sat_id;	///<该tp所属的tp集合的id，如果是卫星方案这个就是卫星的id
+		uint32_t frequency;	///<频点的频率单位 MHz
+		union {
+			GxBusPmTp_s tp_s;
+			GxBusPmTp_c tp_c;
+			GxBusPmTp_t tp_t;
+		};
+	} GxBusPmDataTP;
+
+/**prog的声道模式
+*/
+	typedef enum { GXBUS_PM_PROG_AUDIO_MODE_LEFT = 0,	///<左声道
+		GXBUS_PM_PROG_AUDIO_MODE_RIGHT,	///<右声道
+		GXBUS_PM_PROG_AUDIO_MODE_STEREO,	///<立体声
+	} GxBusPmDataProgAduioTrack;
+
+/**prog的bool型参数,用于skip lock 加密,subt标志 cc标志 ttx标志
+等bool型的参数
+*
+*/
+	typedef enum { GXBUS_PM_PROG_BOOL_ENABLE = 0,	///<使能
+		GXBUS_PM_PROG_BOOL_DISABLE,	///<不使能
+	} GxBusPmDataProgSwitch;
+
+/**prog的类型 指明该prog是 tv还是radio
+*
+*/
+	typedef enum { GXBUS_PM_PROG_TV = 0,	///<tv节目
+		GXBUS_PM_PROG_RADIO,	///<radio节目
+	} GxBusPmDataProgType;
+
+/**prog的视频类型 指明该prog的视频是mepg的还是avs的
+*
+*/
+	typedef enum { GXBUS_PM_PROG_MEPG = 0,	///<mepg编码
+		GXBUS_PM_PROG_AVS,	///<AVS编码
+	} GxBusPmDataProgVideoType;
+
+/**audio的等级
+*
+*/
+	typedef enum { GXBUS_PM_PROG_AUDIO_LECEL_HIG = 0,	///<音量等级高,声音比较大
+		GXBUS_PM_PROG_AUDIO_LECEL_MID,	///<音量等级中
+		GXBUS_PM_PROG_AUDIO_LECEL_LOW,	///<音量等级低
+	} GxBusPmDataProgAudioLevel;
+
+/**该结构是每个prog的属性结构体,
+用户得到的prog参数就是以下结构体
+*/
+	typedef struct {
+
+		/*4B */
+		uint32_t id;	///<该节目的id
+		/*4B */
+		uint32_t tp_id;	///<该节目所属tp的id
+		/*4B */
+		uint32_t sat_id;	///<该tp所属的tp集合的id，如果是卫星方案这个就是卫星的id
+		/*4B */
+		uint32_t service_id:16;
+		uint32_t audio_volume:8;	///<音量
+		GxBusPmDataProgAduioTrack audio_mode:3;	///<声道模式 left right 或者是stereo
+		GxBusPmDataProgSwitch scramble_flag:1;	///<节目加密标志位
+		GxBusPmDataProgSwitch skip_flag:1;	///<跳过标记
+		GxBusPmDataProgSwitch lock_flag:1;	///<加锁标志
+		GxBusPmDataProgSwitch ttx_flag:1;
+		GxBusPmDataProgSwitch subt_flag:1;
+
+		/*4B */
+		uint32_t favorite_flag;	///<喜爱标记，代表该节目属于哪个喜爱组，每一位代表一个喜爱组 比如 第一位为1 那就标志该节目被添加进了喜爱组1
+		/*4B */
+		uint16_t pcr_pid;
+		uint16_t pmt_pid;
+
+		/*4B */
+		uint16_t bouquet_id;
+		uint16_t video_pid;
+
+		/*4B */
+		uint32_t ecm_pid_v:16;	///<视频的ecm pid
+		uint32_t pmt_version:5;
+		uint32_t audio_count:4;
+		uint32_t reserved2:1;	///<保留位
+		GxBusPmDataProgAudioLevel audio_level:2;
+		GxBusPmDataProgVideoType video_type:1;	///<mpeg or avs
+		GxBusPmDataProgSwitch cc_flag:1;
+		GxBusPmDataProgSwitch ac3_flag:1;
+		GxBusPmDataProgType service_type:1;	///< tv or radio
+
+		/*4*4B */
+		uint8_t prog_name[MAX_PROG_NAME];
+
+		/*4B */
+		uint16_t count;	///<该参数表明了这个service的观看频率,
+						//用于删除epg的时候做判断,临时用作audio pid  by shenbin 091109
+		uint16_t ts_id;
+
+		/*4B */
+		uint32_t cas_id;
+	} GxBusPmDataProg;
+	typedef enum { GXBUS_PM_PROG_MODIFY_SKIP = 0, GXBUS_PM_PROG_MODIFY_LOCK,
+	} GxBusPmProgModifyBoolType;
+
+/**每一个喜爱组都具备这样一个结构
+*/
+	typedef struct {
+		uint32_t id;
+		uint8_t fav_name[MAX_FAV_GROUP_NAME];
+	} GxBusPmDataFavItem;
+	typedef struct {
+		uint16_t cas_id_begin;
+		uint16_t cas_id_end;
+		uint8_t cas_name[MAX_CAS_NAME];
+	} GxBusPmDataCasInfot;
+
+	/*stream的结构*/
+	typedef struct {
+		uint32_t audio_type;//0-pcm 1-ac3
+		uint16_t audio_pid;
+		uint16_t ecm_pid;
+		uint8_t name[4];
+	} GxBusPmDataStream;
+
+/* Exported Functions ----------------------------------------------------- */
+
+/**
+ * @brief 		数据库初始化,用于打开数据库 并且当需要的表不存在的时候创建表
+ * @param   	void
+ * @return   	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmDbaseInit(void);
+
+/**
+ * @brief 		关闭数据库,下次再使用前必须再次调用初始化打开数据库
+ * @param   	void
+ * @return   	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmDbaseClose(void);
+
+/**
+ * @brief 		获取卫星的数量
+ * @param   	void
+ * @return   	-1:发生错误
+                正常数字:卫星数量
+ */
+	int32_t GxBus_PmSatNumGet(void);
+
+/**
+ * @brief 		通过位置获取卫星的信息
+ * @param   	pos:所要获取信息的起始卫星的位置
+      			Num:想要获取的卫星数量
+      			sat_arry:获取的信息的指针sat_arry:获取的信息的指针,由该函数的使用者开辟空间
+ * @return     	-1:发生错误
+ 				正常数字:读取的真正的卫星数量
+ */
+	int32_t GxBus_PmSatsGetByPos(uint32_t pos, uint32_t num, GxBusPmDataSat * sat_arry);
+
+/**
+ * @brief 		通过id获取卫星的信息
+ * @param   	id:所要获取信息的卫星的id
+     			sat:获取的信息的指针
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmSatGetById(uint32_t id, GxBusPmDataSat * sat);
+
+/**
+ * @brief 		编辑卫星参数,编辑前需要先获取原始参数 再进行修改 其中id号是
+ 				不能改动的
+ * @param   	sat:信息的指针
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmSatModify(GxBusPmDataSat * sat);
+
+/**
+ * @brief 		删除卫星,支持批量删除
+ * @param   	id_arry:所要删除的卫星的id
+ 				num:所要删除的卫星数量
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmSatDelete(uint32_t * id_arry, uint32_t num);
+
+/**
+ * @brief 		添加卫星
+ * @param   	sat:添加的卫星
+ 				
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GX_PM_DBASE_FULL:数据库已经满了
+ 				GXCORE_ERROR:执行失败
+ */ 
+	status_t GxBus_PmSatAdd(GxBusPmDataSat * sat);
+
+/**
+ * @brief 		获取tp的数量
+ * @param   	void
+ 				
+
+ * @return     	-1:发生错误
+                正常数字:tp数量
+ */
+	int32_t GxBus_PmTpNumGet(void);
+
+/**
+ * @brief 		通过位置获取tp的信息
+ * @param   	pos:所要获取信息的起始tp的位置
+      			Num:想要获取的tp数量
+      			tp_arry:获取的信息的指针tp_arry:获取的信息的指针,由该函数的使用者开辟空间
+ * @return     	-1:发生错误
+ 				正常数字:读取的真正的tp数量
+ */
+	int32_t GxBus_PmTpGetByPos(uint32_t pos, uint32_t num, GxBusPmDataTP * tp_arry);
+
+/**
+ * @brief 		通过id获取tp的信息
+ * @param   	id:所要获取信息的tp的id
+     			tp:获取的信息的指针
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmTpGetById(uint32_t id, GxBusPmDataTP * tp);
+
+/**
+ * @brief 		编辑tp参数,编辑前需要先获取原始参数 再进行修改 其中id号是
+ 				不能改动的
+ * @param   	tp:信息的指针
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmTpModify(GxBusPmDataTP * tp);
+
+/**
+ * @brief 		删除tp,支持批量删除
+ * @param   	id_arry:所要删除的tp的id
+ 				num:所要删除的tp数量
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmTpDelete(uint32_t * id_arry, uint32_t num);
+
+/**
+ * @brief 		添加tp
+ * @param   	tp:添加的tp
+ 				
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GX_PM_DBASE_FULL:数据库满
+ 				GXCORE_ERROR:执行失败
+ */ 
+	status_t GxBus_PmTpAdd(GxBusPmDataTP * tp);
+
+/**
+ * @brief 		获取prog的数量 使用此接口时如果更改了观看模式 
+ 				应该先更新系统信息里的view_info 
+ 				再调用此接口获取新的观看模式下的节目数量
+ * @param   	void
+ 				
+
+ * @return     	-1:发生错误
+                正常数字:prog数量
+ */
+	int32_t GxBus_PmProgNumGet(void);
+
+/**
+ * @brief 		通过位置获取prog的信息 使用此接口时如果更改了观看模式
+ 				应该先更新系统信息里的view_info 
+ 				再调用此节口更新节目列表
+ * @param   	pos:所要获取信息的起始prog的位置
+      			Num:想要获取的prog数量
+      			prog_arry:获取的信息的指针prog_arry:获取的信息的指针,由该函数的使用者开辟空间
+ * @return     	-1:发生错误
+ 				正常数字:读取的真正的prog数量
+ */
+	int32_t GxBus_PmProgGetByPos(uint32_t pos, uint32_t num, GxBusPmDataProg * prog_arry);
+
+/**
+ * @brief 		通过id获取prog的信息
+ * @param   	id:所要获取信息的prog的id
+     			prog:获取的信息的指针
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmProgGetById(uint32_t id, GxBusPmDataProg * prog);
+
+/**
+ * @brief 		通过id获取prog的url信息,该信息主要是为了给player播放用的,prog_url的
+ 				空间是由使用接口的地方分配的 大小为 GX_PM_MAX_PROG_URL_SIZE
+ * @param   	prog:所要获取url信息的prog
+     			prog_url:获取的url信息的buffer
+     			uint32_t size:buffer的大小 如果小于GX_PM_MAX_PROG_URL_SIZE会返回错误
+     			
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+status_t GxBus_PmProgUrlGet(GxBusPmDataProg* prog, int8_t* prog_url,uint32_t size);
+
+/**
+ * @brief 		通过id修改节目信息中以bool形式表示的信息,比如skip:0-跳过 1-不跳过
+ * @param   	type:修改的内容
+ 				id_arry:所要修改的id
+     			num:所要修改的节目的数量
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmProgBoolModify(GxBusPmProgModifyBoolType type, uint32_t * id_arry, uint32_t num);
+
+/**
+ * @brief 		修改节目的喜爱组信息 一次一个喜爱组
+ * @param   	fav_id:所要修改的喜爱组
+				id_arry:所要修改的节目的id
+      			Num:所要修改的节目的数量
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmProgFavModify(uint32_t fav_id, uint32_t * id_arry, uint32_t num);
+
+/**
+ * @brief 		编辑prog参数,编辑前需要先获取原始参数 再进行修改 其中id号是
+ 				不能改动的
+ * @param   	prog:信息的指针
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmProgInfoModify(GxBusPmDataProg * prog);
+
+/**
+ * @brief 		删除prog,支持批量删除
+ * @param   	id_arry:所要删除的prog的id
+ 				num:所要删除的prog数量
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmProgDelete(uint32_t * id_arry, uint32_t num);
+
+/**
+ * @brief 		添加prog
+ * @param   	prog:添加的prog
+ 				
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ 				GX_PM_DBASE_FULL:数据库已经满了
+ */
+	status_t GxBus_PmProgAdd(GxBusPmDataProg * prog);
+
+/**
+ * @brief 		移动节目 注意 target_id不能出现在id_arry中
+ * @param   	id_arry:所要移动的节目id
+     			Num:所要移动的节目数量
+     			target_id:目标id,比如 次参数为5 代表要把选中的节目移动到节目id为5的节目前
+ 	
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */ 
+	status_t GxBus_PmProgMove(uint32_t * id_arry, uint32_t num, uint32_t target_id);
+
+
+/**
+ * @brief 		监测节目时否存在,主要用于搜台时候的保存
+ * @param   	ts_id:所要检测的ts id
+     			service_id:所要检测的service id
+ 	
+ * @return     	0:该节目不存在
+ 				>1:该节目已经存在
+ 				-1:失败
+ */
+	int32_t GxBus_PmProgExistChek(uint16_t ts_id, uint16_t service_id);
+
+/**
+ * @brief 		获取指定的prog的pos,主要用于epg删除service时的判断
+ * @param   	uint32_t ts_id:和service_id确定一个service
+ 				uint32_t service_id:和ts_id确定一个service
+
+ * @return     	-1:获取失败
+ 				正常值:节目的pos
+ */
+int32_t GxBus_PmProgPosGet(uint32_t ts_id,uint32_t service_id);
+
+/**
+ * @brief 		获取节目的stream记录数量
+ * @param   	prog_id:节目的id
+ 	
+ * @return     	-1:发生错误
+                正常数字:stream 记录数
+ */
+	int32_t GxBus_PmStreamNumGet(uint32_t prog_id);
+
+/**
+ * @brief 		获取节目的stream记录 调用此接口之前必须调用
+ 				int32_t GxBus_PmStreamNumGet(uint32_t prog_id);先获取数量
+ * @param   	prog_id:节目的id
+ 	
+ * @return     	-1:发生错误
+                正常数字:获取的stream 记录数
+ */
+	int32_t GxBus_PmStreamGet(uint32_t prog_id, uint32_t num, GxBusPmDataStream * stream_arry);
+
+/**
+ * @brief 		添加节目的stream记录,函数内部会先把之前的prog_id的记录全部删除
+ * @param   	prog_id:节目的id
+				num:stream信息的条数
+				stream_arry:stream信息
+
+ 	
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmStreamAdd(uint32_t prog_id, uint32_t num, GxBusPmDataStream * stream_arry);
+
+/**
+ * @brief 		获取cas的数量
+ * @param   	void
+ 	
+ * @return     	-1:发生错误
+                正常数字:cas 数
+ */
+	int32_t GxBus_PmCasNumGet(void);
+
+/**
+ * @brief 		通过位置获取cas信息
+ * @param   	pos:位置
+				Cas:cas信息
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmCasGetByPos(uint32_t pos, GxBusPmDataCasInfot * cas);
+
+/**
+ * @brief 		获取节目的cas,首先得从节目中获取cas_id
+ * @param   	cas_id:cas的id
+				cas:case信息
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmCasGetById(uint32_t cas_id, GxBusPmDataCasInfot * cas);
+
+/**
+ * @brief 		获取喜爱组的数量
+ * @param   	void
+
+ * @return     -1:发生错误
+                正常数字:获取的fav group 记录数
+ */
+	int32_t GxBus_PmFavGroupNumGet(void);
+
+/**
+ * @brief 		通过位置获取fav group信息
+ * @param   	pos:位置
+ 				num:所要获取的数量
+				fav_arry:cas信息
+
+ * @return     	-1:失败
+ 				正常数字:获取的真是数量
+ */
+	int32_t GxBus_PmFavGroupGetByPos(uint32_t pos, uint32_t num, GxBusPmDataFavItem * fav_arry);
+
+/**
+ * @brief 		通过id获取喜爱组信息
+ * @param   	id:喜爱组id
+				fav_arry:cas信息
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmFavGroupGetById(uint32_t id, GxBusPmDataFavItem * fav);
+
+/**
+ * @brief 		编辑fav参数,编辑前需要先获取原始参数 再进行修改 其中id号是
+ 				不能改动的
+ * @param   	fav:信息的指针
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+	status_t GxBus_PmFavGroupModify(GxBusPmDataFavItem * fav);
+
+/**
+ * @brief 		开始一个事务 典型应用:搜索存台时由search服务控制保存节目
+ * @param   	void
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+status_t GxBus_PmTransactionBegin(void);
+
+/**
+ * @brief 		提交一个事务 典型应用:搜索存台时由search服务控制保存节目
+ * @param   	void
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+status_t GxBus_PmTransactionCommit(void);
+
+/**
+ * @brief 		回滚一个事务 取消开始后的事务,恢复事务开始前的状态
+ * @param   	void
+
+ * @return     	GXCORE_SUCCESS:执行正常
+ 				GXCORE_ERROR:执行失败
+ */
+status_t GxBus_PmTransactionRollback(void);
+
+#ifdef __cplusplus
+}
+#endif				/*  */
+#endif				/* __GXPROGRAM_MANAGE_SQLITE_H__ */
+/* End of file -------------------------------------------------------------*/

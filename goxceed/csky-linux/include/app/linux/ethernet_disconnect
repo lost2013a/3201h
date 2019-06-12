@@ -1,0 +1,55 @@
+#!/bin/sh
+#$1 save result file
+#$2 wifi dev
+#$3 ssid
+#$4 router mac address
+#$5 psk
+version="ethernet_disconnect:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:wifi dev\nParameter3:ssid\nParameter4:router mac address\nParameter5:psk\nexample:\nethernet_disconnect file WIFI0 Guoxin_DAD 74:44:01:99:66:70 guoxinsz\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$2" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$3" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$4" ];then	printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/"
+mkdir -p "$ethernetTmpDir"
+#删除可能存在的临时文件
+rm "$1" -rf
+rm "$ethernetTmpDir""sh" -rf
+dev=`echo "$2"|sed "/^WIFI/ s//ra/g;/^ETH/ s//eth/g"`
+findResult=`echo "$dev"|grep "eth"`
+if [ -n "$findResult" ];then	
+	findResult=`mount|grep "/opt/gx6602"`
+	if [ -z "$findResult" ];then
+		ifconfig "$dev" down
+	else
+		echo "eth0 use for nfs,not configure!!!"
+	fi	
+else
+	#获取当前dev的MAC地址
+	devMacAddress=`ifconfig|grep "^$dev"|grep "HWaddr"|sed "/HWaddr/ s//\nHWaddr/g;/ / s///g"|grep "HWaddr"|sed "/HWaddr/ s///g"`
+	#删掉连接记录	
+	if [ -s "$ethernetLocalDir""wifi_connect_record" ];then
+		line=`grep -n "$devMacAddress"",""$3"",""$4"",""$5" "$ethernetLocalDir""wifi_connect_record"|sed "/:/ s//\n/g"|sed -n '1p'`
+		if [ "$line" = "0" ];then
+			echo "waring:wifi connect record file not loss!!"
+		else
+			sed -i "$line"d "$ethernetLocalDir""wifi_connect_record"
+		fi	
+	fi
+	#干掉该dev可能存在的后台连接程序,生成动态脚本
+	echo "#!/bin/sh" > "$ethernetTmpDir""sh"
+	psLogs=`ps`
+	echo "$psLogs"|grep "wpa_supplicant -B -i "$dev""|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetTmpDir""sh"
+	echo "exit 0" >> "$ethernetTmpDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpDir""sh"
+	"$ethernetTmpDir""sh"
+	rm "$ethernetTmpDir""sh" -rf
+    ifconfig "$dev" down
+fi
+echo "ok" > "$1"
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

@@ -1,0 +1,181 @@
+#!/bin/sh
+#$1 save result file
+#$2 wifi dev
+#$3 ssid
+#$4 router mac address
+#$5 psk
+rm "$1" -rf
+version="ethernet_wifi_connect:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:wifi dev\nParameter3:ssid\nParameter4:router mac address\nParameter5:psk\nexample:\nethernet_wifi_connect file WIFI0 Guoxin_DAD 74:44:01:99:66:70 guoxinsz\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$2" ];then	echo "fail" > "$1";printf "$helpContent";exit 0;fi
+if [ -z "$3" ];then	echo "fail" > "$1";printf "$helpContent";exit 0;fi
+if [ -z "$4" ];then	echo "fail" > "$1";printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/manual/"
+ethernetLocalDir="/home/gx/local/ethernet/"
+WifiCfgIP4ConnectCmd="ethernet_wifi_cfg_ip4connect"		
+
+mkdir -p "$ethernetTmpDir"
+mkdir -p "$ethernetLocalDir"
+#删除可能存在的临时文件
+rm "$1" -rf
+rm "$1""_tmp" -rf
+rm "$ethernetTmpDir""sh" -rf
+rm "$ethernetTmpDir""cfg" -rf
+rm "$ethernetTmpDir""tmp" -rf
+dev=`echo "$2"|sed "/^WIFI/ s//ra/g"`
+#查询当前dev是否存在
+findResult=`iwconfig|grep -c "^"$dev""`
+if [ "$findResult" = "0" ];then
+	echo "fail" > "$1"
+	echo "$2"":not connect good!"
+	exit 0
+else
+	#判断当前dev有没有up
+	findReslut=`ifconfig|grep "$dev"`
+	if [ -z "$findReslut" ];then
+		ifconfig "$dev" up
+		sleep 2
+	fi	
+	#获取当前dev的MAC地址
+	devMacAddress=`ifconfig|grep "^$dev"|grep "HWaddr"|sed "/HWaddr/ s//\nHWaddr/g;/ / s///g"|grep "HWaddr"|sed "/HWaddr/ s///g"`
+	if [ -z "$devMacAddress" ];then
+		echo "$2"":interface not connect good!"
+		echo "fail" > "$1"
+		exit 0
+	fi	
+	#保存连接参数					
+	findResult=`grep "$devMacAddress"",""$3"",""$4""," "$ethernetLocalDir""wifi_connect_record"`
+	if [ -n "$findResult" ];then
+		#删除原来记录
+		sed -i "/$devMacAddress,$3,$4,/d"  "$ethernetLocalDir""wifi_connect_record"
+	fi
+	echo "$devMacAddress"",""$3"",""$4"",""$5" >> "$ethernetLocalDir""wifi_connect_record"	
+	#判断当前热点是否存在,及加密方式是否正确
+	findResult=`iwlist "$dev" scanning|tr -d "\n"|sed "/ - Address: / s//\nAddress:/g"|grep "$4"|grep "ESSID:\"$3"`
+	if [ -n "$findResult" ];then
+		if [ -z "$5" ];then
+			findResult=`echo "$findResult"|grep "Encryption key:off"`
+		else
+			findResult=`echo "$findResult"|grep "Encryption key:on"`			
+		fi
+		if [ -n "$findResult" ];then
+			#让应用提示等待
+			echo "waiting" > "$1"
+			#干掉该dev可能存在的后台连接程序,生成动态脚本
+			echo "#!/bin/sh" > "$ethernetTmpDir""sh"
+			psLogs=`ps`
+			echo "$psLogs"|grep "wpa_supplicant -B -i "$dev""|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetTmpDir""sh"
+			echo "exit 0" >> "$ethernetTmpDir""sh"
+			#执行动态脚本
+			chmod +x "$ethernetTmpDir""sh"
+			"$ethernetTmpDir""sh"
+			rm "$ethernetTmpDir""sh" -rf
+			#确认完毕开始进行连接操作
+			echo "connecting..."
+			#生成config文件
+			echo "network={" > "$ethernetTmpDir""cfg"
+			echo "ssid=\"""$3""\"" >> "$ethernetTmpDir""cfg"
+			echo "5=$5"			
+			if [ -n "$5" ];then
+				gotProtoFlag="0"
+				proto=`echo "$findResult"|grep "IE: WPA\|IE: IEEE 802.11i/WPA2"`
+				if [ -n "$proto" ];then
+					gotProtoFlag="1"
+					echo "proto=WPA WPA2" >> "$ethernetTmpDir""cfg"
+					echo "key_mgmt=WPA-PSK" >> "$ethernetTmpDir""cfg"
+					echo "pairwise=CCMP TKIP" >> "$ethernetTmpDir""cfg"
+					echo "group=CCMP TKIP" >> "$ethernetTmpDir""cfg"
+				fi
+				if [ "$gotProtoFlag" = "0" ];then
+					proto=`echo "$findResult"|grep "IE: "`
+					echo "proto=$proto"
+					if [ -n "$proto" ];then
+						gotProtoFlag="2"
+						echo "key_mgmt=NONE" >> "$ethernetTmpDir""cfg"
+					fi
+				fi
+				if [ "$gotProtoFlag" = "0" ];then					
+					echo "warring:this proto not support,need debug!!!!"
+					echo "$findResult"
+				fi
+				if [ "$gotProtoFlag" = "1" ];then
+					echo "psk=\"""$5""\"" >> "$ethernetTmpDir""cfg"
+				fi
+				if [ "$gotProtoFlag" = "2" ];then
+					echo "wep_key0=\"""$5""\"" >> "$ethernetTmpDir""cfg"
+				fi			
+			else
+				echo "key_mgmt=NONE" >> "$ethernetTmpDir""cfg"
+			fi
+			echo "priority=2" >> "$ethernetTmpDir""cfg"
+			echo "}" >> "$ethernetTmpDir""cfg"
+			#执行连接命令
+			wpa_supplicant -B -i "$dev" -Dwext -c "$ethernetTmpDir""cfg" > "$ethernetTmpDir""tmp"
+			#wpa_supplicant -B -i "$dev" -Dwext -c "$ethernetTmpDir""cfg"
+			sleep 1
+			#采用FOR循环查询连接结果,最大延时10 Seconds
+			for i in `seq 10`;do
+				if [ -n "$5" ];then
+					if [ -s "$ethernetTmpDir""tmp" ];then
+						findResult=`grep "failed to parse psk" "$ethernetTmpDir""tmp"`
+						echo "failed to parse psk"
+						if [ -n "$findResult" ];then
+							break
+						fi
+					fi
+					findResult=`iwconfig "$dev"|grep "Encryption key:off"`
+					if [ -n "$findResult" ];then
+						findResult=""
+					else
+						findResult="ok"
+					fi
+				else
+					findResult=`iwconfig "$dev"|grep "ESSID:\"$3"`
+				fi
+				if [ -n "$findResult" ];then
+					echo "connect successful!"
+					echo "connected" > "$1"
+					#配置IP地址
+					"$WifiCfgIP4ConnectCmd" "$1" "$2" "$devMacAddress"					
+					connectFlag="1"
+					break
+				fi
+				sleep 1
+			done
+			if [ -z "$connectFlag" ];then
+				#干掉该dev可能存在的后台连接程序,生成动态脚本,及关闭该dev
+				echo "#!/bin/sh" > "$ethernetTmpDir""sh"
+				psLogs=`ps`
+				echo "$psLogs"|grep "wpa_supplicant -B -i ra0"|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetTmpDir""sh"
+				echo "exit 0" >> "$ethernetTmpDir""sh"
+				#执行动态脚本
+				chmod +x "$ethernetTmpDir""sh"
+				"$ethernetTmpDir""sh"
+				rm "$ethernetTmpDir""sh" -rf	
+				ifconfig "$dev" down
+				echo "fail" > "$1"				
+				echo "connect fail!"
+			fi
+			rm "$ethernetTmpDir""cfg" -rf
+			rm "$ethernetTmpDir""tmp" -rf
+			exit 0
+		else
+			ifconfig "$dev" down
+			echo "fail" > "$1"
+			echo "$3"" ""$4"":router encryption mode is changed!"
+			exit 0			
+		fi		
+	else
+		ifconfig "$dev" down
+		echo "fail" > "$1"
+		echo "$3"" ""$4"":not exist!"
+		exit 0
+	fi
+	exit 0	
+fi
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

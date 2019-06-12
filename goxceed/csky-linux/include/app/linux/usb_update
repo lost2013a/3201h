@@ -1,0 +1,116 @@
+#!/bin/sh
+SECTION=$1
+BIN_FILE=$2
+
+if [ -z $SECTION ] || [ -z $BIN_FILE ]
+then
+echo "Usage: usb_update [all/USER/BOOT/KERNEL/ROOTFS/DATA]... [FILE]..."
+echo "ex: usb_update all /dev/sda1/download_linux_all.bin"
+exit 1
+fi
+
+if [ -e $BIN_FILE ];then
+
+	echo "start update..."
+
+	FILE_SIZE=$(du $BIN_FILE | awk '{print $1}')
+	echo "Input Bin Size: "$FILE_SIZE
+
+	if [ $SECTION = "all" ];then
+		
+		
+			mtd_num=$(cat /proc/mtd | wc -l)
+			echo "mtd_num=$mtd_num"
+			
+			start=2
+			cur_size=0
+			total_size=0
+			while [ "$start" -le "$mtd_num" ];do
+			     mtd_size=$(cat /proc/mtd | awk 'NR=="'$start'" {print $2}')
+			     real_size="0x$mtd_size"
+			     cur_size=$((real_size>>10))
+			     total_size=$((cur_size+total_size))
+			     start=$((start+1))
+			done
+		    if [ $FILE_SIZE -eq $total_size ];then
+			
+			
+			cur_skip=0
+			cur_count=0
+
+			index=2
+			while [ "$index" -le "$mtd_num" ];do
+
+				block_size=$(cat /proc/mtd | awk 'NR=="'$index'" {print $2}')
+				mtd_index=$((index - 2))
+				dev_name="/dev/mtd$mtd_index"
+				#dev_block_name="/dev/mtdblock$mtd_index"
+				
+				str_size="0x$block_size"
+				cur_count=$((str_size>>16))
+				
+				echo "$dev_name----$block_size---skip:$cur_skip---count:$cur_count"
+				
+				#start update...
+				dd if=$BIN_FILE of=/tmp/mtd_img_tmp bs=64k skip="$cur_skip" count="$cur_count"
+				sync
+				#mtd_debug erase "$dev_name" 0 "$str_size"
+				#mtd_debug write "$dev_block_name" 0 "$str_size" /tmp/mtd_img_tmp
+				flash_eraseall "$dev_name"
+				flashcp /tmp/mtd_img_tmp "$dev_name"
+				sync
+				rm -f /tmp/mtd_img_tmp
+				echo "$dev_name update ok."
+				
+				cur_skip=$((cur_skip+cur_count))
+				
+			index=$((index+1))
+			done	
+			
+		else
+			echo "the size of the bin file in 'all' mode must be $total_size"
+			exit 4
+		fi
+		
+		echo "update all ok."
+		
+	else
+	
+		if [ $SECTION = "USER" ] || [ $SECTION = "BOOT" ] || [ $SECTION = "KERNEL" ] || [ $SECTION = "ROOTFS" ] || [ $SECTION = "DATA" ] || [ $SECTION = "LOGO" ] || [ $SECTION = "OTA" ];then
+			echo "start update the $SECTION section..."
+		else
+			echo "the section name you input is wrong!"
+			exit 3
+		fi
+		
+		block_size=$(cat /proc/mtd |grep "$SECTION"| awk '{print $2}')
+		str_size="0x$block_size"
+		block_size_k=$((str_size>>8))
+		
+		if [ $FILE_SIZE -le $block_size_k ];then
+			mtd_index_str=$(cat /proc/mtd |grep "$SECTION"| awk '{print $1}' | sed 's/://')
+			dev_name="/dev/$mtd_index_str"
+			#dev_block_name=$(echo "$mtd_index_str" | sed 's/mtd/mtdblock/')
+			
+			cur_count=$((str_size>>16))
+		
+			#start update
+			dd if=$BIN_FILE of=/tmp/mtd_img_tmp bs=64k skip=0 count="$cur_count"
+			sync
+			#mtd_debug erase "$dev_name" 0 "$str_size"
+			#mtd_debug write "$dev_name" 0 "$str_size" /tmp/mtd_img_tmp
+			flash_eraseall "$dev_name"
+			flashcp /tmp/mtd_img_tmp "$dev_name"
+			sync
+			rm -f /tmp/mtd_img_tmp
+			echo "$dev_name update ok."
+		else
+			echo "the size of the bin file[$FILE_SIZE] is large then the mtdblock[$block_size_k]!"
+			exit 5
+		fi
+	fi
+else
+	echo "File "$BIN_FILE" not exist!"
+	exit 2
+fi
+

@@ -1,0 +1,4 @@
+class ostream {
+public:
+	ostream() {}
+};

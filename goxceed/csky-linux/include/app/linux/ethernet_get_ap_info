@@ -1,0 +1,50 @@
+#!/bin/sh
+#$1 save result file
+#$2 wifi mac
+#$3 ssid
+#$4 ap mac
+version="ethernet_get_ap_info:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:wifi mac\nParameter3:ssid\nParameter4:ap mac\nexample:\neethernet_get_ap_info file E8:4E:06:06:18:62 Guoxin_DAD 74:44:01:99:66:70\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$2" ];then	printf "$helpContent";exit 0;fi
+ethernetLocalDir="/home/gx/local/ethernet/"
+#删除可能存在的临时文件
+rm "$1" -rf
+rm "$1""_tmp" -rf
+if [ -s "$ethernetLocalDir""wifi_connect_record" ];then
+	if [ -z "$3" ];then		
+		apInfo=`grep "^$2," "$ethernetLocalDir""wifi_connect_record"`
+		if [ -n "$apInfo" ];then
+			count=`echo "$apInfo"|wc -l`
+			echo "$count" > "$1""_tmp"
+			echo "$apInfo"|cut -d"," -f "2-4" >> "$1""_tmp"
+			mv "$1""_tmp" "$1"
+			exit 0
+		fi
+	fi
+	if [ -z "$4" ];then
+		apInfo=`grep "^$2,$3," "$ethernetLocalDir""wifi_connect_record"`
+		if [ -n "$apInfo" ];then
+			count=`echo "$apInfo"|wc -l`
+			echo "$count" > "$1""_tmp"
+			echo "$apInfo"|cut -d"," -f "3-4" >> "$1""_tmp"
+			mv "$1""_tmp" "$1"
+			exit 0
+		fi
+	else
+		apInfo=`grep "^$2,$3,$4," "$ethernetLocalDir""wifi_connect_record"`
+		if [ -n "$apInfo" ];then
+			echo "1" > "$1""_tmp"
+			echo "$apInfo"|cut -d"," -f "4" >> "$1""_tmp"
+			mv "$1""_tmp" "$1"
+			exit 0
+		fi
+	fi
+else
+	echo "" > "$1"
+fi
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-10 peter

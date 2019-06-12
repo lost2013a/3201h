@@ -1,0 +1,111 @@
+#!/bin/sh
+#$1 dev
+##############################################################
+version="ethernet_cancel:v1.0\n"
+helpContent="Parameter1:dev\nexample:\nethernet_cancel\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/manual/"
+ethernetTmpReserveDir="/tmp/ethernet/reserve/"
+mkdir -p "$ethernetTmpDir"
+mkdir -p "$ethernetTmpReserveDir"
+rm "$ethernetTmpReserveDir""sh" -rf
+rm "$ethernetTmpReserveDir""tmp" -rf
+#关闭对应dev的dhcp和wpa_supplicant
+if [ "$1" = "WIFI-ALL" ];then	
+	echo "#!/bin/sh" > "$ethernetTmpReserveDir""sh"
+	psLogs=`ps`
+	findResult=`echo "$psLogs"|grep "ethernet_get_wifi_ap_list"`
+	if [ -n "$findResult" ];then echo "killall ethernet_get_wifi_ap_list" >> "$ethernetTmpReserveDir""sh";fi
+	psLogs=`ps`
+	findResult=`echo "$psLogs"|grep "ethernet_get_connect_status"`
+	if [ -n "$findResult" ];then echo "killall ethernet_get_connect_status" >> "$ethernetTmpReserveDir""sh";fi
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "ethernet_cfg_ip"`
+	if [ -n "$findResult" ];then echo "killall ethernet_cfg_ip" >> "$ethernetTmpReserveDir""sh";fi	
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "ethernet_wifi_connect"`
+	if [ -n "$findResult" ];then echo "killall ethernet_wifi_connect" >> "$ethernetTmpReserveDir""sh";fi	
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "ethernet_wifi_cfg_ip4connect"`
+	if [ -n "$findResult" ];then echo "killall ethernet_wifi_cfg_ip4connect" >> "$ethernetTmpReserveDir""sh";fi
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "wpa_supplicant"`
+	if [ -n "$findResult" ];then echo "killall wpa_supplicant" >> "$ethernetTmpReserveDir""sh";fi	
+	psLogs=`ps`
+	echo "$psLogs"|grep "udhcpc -b -n -q -i ra"|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetTmpReserveDir""sh"	
+	echo "exit 0" >> "$ethernetTmpReserveDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpReserveDir""sh"
+	"$ethernetTmpReserveDir""sh"
+	#获取所有存在的WIFI列表,关闭所有网口
+	iwconfig|grep -v "^ \|^$"|sed "/ / s//\n/g"|grep "ra" > "$ethernetTmpReserveDir""tmp"
+	echo "#!/bin/sh" > "$ethernetTmpReserveDir""sh"
+	sed "/^/ s//ifconfig /g;/$/ s// down/g" "$ethernetTmpReserveDir""tmp" >> "$ethernetTmpReserveDir""sh"
+	echo "exit 0" >> "$ethernetTmpReserveDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpReserveDir""sh"
+	"$ethernetTmpReserveDir""sh"
+	rm "$ethernetTmpReserveDir" -rf
+	cd "$ethernetTmpDir"
+	rm -rf *	
+	exit 0
+fi
+dev=`echo "$1"|sed "/^WIFI/ s//ra/g;/^ETH/ s//eth/g"`
+findResult=`echo "$dev"|grep "eth"`
+if [ -n "$findResult" ];then
+	echo "#!/bin/sh" > "$ethernetTmpReserveDir""sh"
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "ethernet_cfg_ip"`
+	if [ -n "$findResult" ];then echo "killall ethernet_cfg_ip" >> "$ethernetTmpReserveDir""sh";fi		
+	psLogs=`ps`
+	echo "$psLogs"|grep "udhcpc -b -n -q -i ""$dev"""|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetTmpReserveDir""sh"	
+	echo "exit 0" >> "$ethernetTmpReserveDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpReserveDir""sh"
+	"$ethernetTmpReserveDir""sh"
+	rm "$ethernetTmpReserveDir" -rf
+	findResult=`mount|grep "/opt/gx6602"`
+	if [ -z "$findResult" ];then
+		ifconfig eth0 down > /dev/null
+	else
+		echo "eth0 use for nfs,not configure!!!"
+	fi	
+	cd "$ethernetTmpDir"
+	rm -rf *	
+	exit 0
+fi
+findResult=`echo "$dev"|grep "ra"`
+if [ -n "$findResult" ];then
+	echo "#!/bin/sh" > "$ethernetTmpReserveDir""sh"
+	psLogs=`ps`
+	findResult=`echo "$psLogs"|grep "ethernet_get_wifi_ap_list"`
+	if [ -n "$findResult" ];then echo "killall ethernet_get_wifi_ap_list" >> "$ethernetTmpReserveDir""sh";fi
+	psLogs=`ps`
+	findResult=`echo "$psLogs"|grep "ethernet_get_connect_status"`
+	if [ -n "$findResult" ];then echo "killall ethernet_get_connect_status" >> "$ethernetTmpReserveDir""sh";fi
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "ethernet_cfg_ip"`
+	if [ -n "$findResult" ];then echo "killall ethernet_cfg_ip" >> "$ethernetTmpReserveDir""sh";fi	
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "ethernet_wifi_connect"`
+	if [ -n "$findResult" ];then echo "killall ethernet_wifi_connect" >> "$ethernetTmpReserveDir""sh";fi	
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "ethernet_wifi_cfg_ip4connect"`
+	if [ -n "$findResult" ];then echo "killall ethernet_wifi_cfg_ip4connect" >> "$ethernetTmpReserveDir""sh";fi
+	psLogs=`ps`
+	echo "$psLogs"|grep "wpa_supplicant -B -i "$dev""|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetTmpReserveDir""sh"
+	psLogs=`ps`
+	echo "$psLogs"|grep "udhcpc -b -n -q -i ""$dev"""|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetTmpReserveDir""sh"	
+	echo "exit 0" >> "$ethernetTmpReserveDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpReserveDir""sh"
+	"$ethernetTmpReserveDir""sh"	
+	rm "$ethernetTmpReserveDir" -rf
+	ifconfig "$dev" down > /dev/null
+	cd "$ethernetTmpDir"
+	rm -rf *	
+	exit 0
+fi
+####################logs############################
+#v1.0 initial 2012-10-08 peter

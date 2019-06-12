@@ -1,0 +1,70 @@
+#!/bin/sh
+#$1 save result file
+#$2 wifi dev
+version="ethernet_get_wifi_ap_list:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:wifi dev\nexample:\nethernet_get_wifi_ap_list file WIFI0\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$2" ];then	printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/manual/"
+mkdir -p "$ethernetTmpDir"
+#删除可能存在的临时文件
+rm "$1" -rf
+rm "$1" -rf
+rm "$1""_tmp" -rf
+rm "$ethernetTmpDir""tmp" -rf
+dev=`echo "$2"|sed "/^WIFI/ s//ra/g"`
+#查询当前dev是否存在
+findResult=`iwconfig|grep -c "^"$dev""`
+if [ "$findResult" = "0" ];then
+	echo "" > "$1"
+	echo "$2"":not connect good!"
+	exit 0
+else
+	#判断当前dev有没有up
+	findReslut=`ifconfig|grep "$dev"`
+	if [ -z "$findReslut" ];then
+		echo fist up ra0
+		ifconfig "$dev" up
+		sleep 2
+	fi
+	#获取当前dev的MAC地址
+	devMacAddress=`ifconfig|grep "^$dev"|grep "HWaddr"|sed "/HWaddr/ s//\nHWaddr/g;/ / s///g"|grep "HWaddr"|sed "/HWaddr/ s///g"`
+	#扫描热点
+	iwlist "$dev" scanning > "$ethernetTmpDir""tmp"
+	if [ -s "$ethernetTmpDir""tmp" ];then
+		echo "88156088Mac" > "$1""_tmp"
+		echo "88156088Count" >> "$1""_tmp"
+        ftmp="$1""_tmp2"
+		#sed "/ - Address: / s//\n@#Address/g;/ESSID:\"/ s//\n@ESSID/g;/Quality=/ s//\n@Quality/g;/Encryption key:/ s//\n@key/g" "$ethernetTmpDir""tmp"|grep "^@"|sed "/\"/ s//\n/g;/\// s//\n/g;// s///g"|grep "^@"|sed "s/Address//g;s/ESSID//g;s/Quality//g;s/key//g" >> "$1""_tmp"
+		sed -i "/ - Address: / s//\n@#Address/g;/ESSID:\"/ s//\n@ESSID/g;/Quality=/ s//\n@Quality/g;/Encryption key:/ s//\n@key/g" "$ethernetTmpDir""tmp"
+        grep "^@" < "$ethernetTmpDir""tmp" > "$ftmp"
+        sed -i "/\"/ s//\n/g;/\// s//\n/g;// s///g" "$ftmp"
+        grep "^@" < "$ftmp" > "$ethernetTmpDir""tmp"
+        rm "$ftmp" -rf
+        sed "s/Address//g;s/ESSID//g;s/Quality//g;s/key//g" < "$ethernetTmpDir""tmp" >> "$1""_tmp"
+		count=`grep -c "@#" "$1""_tmp"`
+		echo aplist=$count
+		if [ "$count" = "0" ];then
+			echo "" > "$1"
+			echo "$dev"":not find wifi AP!"
+			rm "$1""_tmp" -rf
+			rm "$ethernetTmpDir""tmp" -rf
+			exit 0
+		else
+			sed -i "/@/ s///g;/#/ s///g;/^88156088Mac/ s//"$devMacAddress"/g;/^88156088Count/ s//"$count"/g" "$1""_tmp"
+			rm "$ethernetTmpDir""tmp" -rf
+			mv "$1""_tmp" "$1"		
+			exit 0
+		fi
+	else
+			echo "" > "$1"
+			echo "$dev"":not find wifi AP!"
+			rm "$ethernetTmpDir""tmp" -rf
+			exit 0
+	fi
+fi
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

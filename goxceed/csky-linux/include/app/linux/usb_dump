@@ -1,0 +1,74 @@
+#!/bin/sh
+SECTION=$1
+BIN_FILE=$2
+
+if [ -z $SECTION ] || [ -z $BIN_FILE ]
+then
+echo "Usage: usb_dump [all/USER/BOOT/KERNEL/ROOTFS/DATA]... [FILE]..."
+echo "ex: usb_dump all /dev/sda1/download_linux_all.bin"
+exit 1
+fi
+
+echo "start dump..."
+
+if [ $SECTION = "all" ];then
+
+	dd if=/dev/zero of=$BIN_FILE bs=64k count=128
+	sync
+	
+	mtd_num=$(cat /proc/mtd | wc -l)
+	echo "mtd_num=$mtd_num"
+	
+	cur_skip=0
+	cur_count=0
+
+	index=2
+	while [ "$index" -le "$mtd_num" ];do
+
+		block_size=$(cat /proc/mtd | awk 'NR=="'$index'" {print $2}')
+		mtd_index=$((index - 2))
+		dev_name="/dev/mtd$mtd_index"
+		#dev_block_name="/dev/mtdblock$mtd_index"
+		
+		str_size="0x$block_size"
+		cur_count=$((str_size>>16))
+		
+		echo "$dev_name----$block_size---skip:$cur_skip---count:$cur_count"
+		
+		#start dump...
+		mtd_debug read "$dev_name" 0 "$str_size" /tmp/mtd_img_tmp
+		sync
+		dd if=/tmp/mtd_img_tmp of=$BIN_FILE bs=64k skip=0 seek="$cur_skip" count="$cur_count"
+		sync
+		rm -f /tmp/mtd_img_tmp
+		echo "$dev_name dump ok."
+		
+		cur_skip=$((cur_skip+cur_count))
+		
+	index=$((index+1))
+	done
+	
+	echo "dump all ok."
+	
+else
+
+	if [ $SECTION = "USER" ] || [ $SECTION = "BOOT" ] || [ $SECTION = "KERNEL" ] || [ $SECTION = "ROOTFS" ] || [ $SECTION = "DATA" ] || [ $SECTION = "LOGO" ] || [ $SECTION = "OTA" ];then
+		echo "start dump the $SECTION section..."
+	else
+		echo "the section name you input is wrong!"
+		exit 3
+	fi
+	
+	block_size=$(cat /proc/mtd |grep "$SECTION"| awk '{print $2}')
+	str_size="0x$block_size"
+	#cur_count=$((str_size>>16))
+	
+	mtd_index_str=$(cat /proc/mtd |grep "$SECTION"| awk '{print $1}' | sed 's/://')
+	dev_name="/dev/$mtd_index_str"
+
+	#start dump...
+	mtd_debug read "$dev_name" 0 "$str_size" $BIN_FILE
+	sync
+	echo "$dev_name dump ok."
+fi
+

@@ -1,0 +1,126 @@
+#!/bin/sh
+#$1 dev
+version="ethernet_monitor4wifi_connect:v1.0\n"
+helpContent="Parameter1:dev\nexample:\nethernet_monitor4wifi_connect WIFI0\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+ethernetMonitorTmpDir="/tmp/ethernet/monitor/"
+ethernetManualTmpDir="/tmp/ethernet/manual/"
+ethernetLocalDir="/home/gx/local/ethernet/"
+ethernetMonitorCmd="ethernet_monitoro"
+ethernetGetIpCmd="ethernet_get_ip"
+ethernetGetApInfoCmd="ethernet_get_ap_info"
+ethernetGetDevListCmd="ethernet_get_dev_list"
+ethernetGetWifiApListCmd="ethernet_get_wifi_ap_list"
+ethernetGetConnectStatusCmd="ethernet_get_connect_status"
+ethernetWifiConnectCmd="ethernet_wifi_connect"
+
+mkdir -p "$ethernetMonitorTmpDir"
+#删除可能存在的临时文件
+rm "$ethernetMonitorTmpDir""result" -rf
+rm "$ethernetMonitorTmpDir""apList" -rf
+rm "$ethernetMonitorTmpDir""apDefaultList" -rf
+rm "$ethernetMonitorTmpDir""wifiIp" -rf
+#判断该dev是否已经连接成功了
+ifconfig | grep ra0 > /tmp/huangbc
+test_huangbc=`grep ra0 /tmp/huangbc`
+if [ -z "$test_huangbc" ];then
+    echo down 1
+fi
+"$ethernetGetConnectStatusCmd" "$ethernetMonitorTmpDir""result" "$1"
+findResult=`grep -v "^$" "$ethernetMonitorTmpDir""result"`
+if [ -n "$findResult" ];then
+	echo "$1"":connect!"
+	rm "$ethernetMonitorTmpDir""result" -rf
+	rm "$ethernetMonitorTmpDir""apList" -rf
+	rm "$ethernetMonitorTmpDir""apDefaultList" -rf
+	rm "$ethernetMonitorTmpDir""wifiIp" -rf	
+	exit 0
+fi
+#获取ip配置
+ifconfig | grep ra0 > /tmp/huangbc
+test_huangbc=`grep ra0 /tmp/huangbc`
+if [ -z "$test_huangbc" ];then
+    echo down 2
+fi
+"$ethernetGetIpCmd" "$ethernetMonitorTmpDir""wifiIp" "$1"
+findResult=`grep -v "^$" "$ethernetMonitorTmpDir""wifiIp"`
+if [ -z "$findResult" ];then
+	echo "$1"":not get ip configure!"
+	rm "$ethernetMonitorTmpDir""result" -rf
+	rm "$ethernetMonitorTmpDir""apList" -rf
+	rm "$ethernetMonitorTmpDir""apDefaultList" -rf
+	rm "$ethernetMonitorTmpDir""wifiIp" -rf	
+	exit 0
+fi
+#获取默认连接AP
+ifconfig | grep ra0 > /tmp/huangbc
+test_huangbc=`grep ra0 /tmp/huangbc`
+if [ -z "$test_huangbc" ];then
+    echo down 3
+fi
+"$ethernetGetApInfoCmd" "$ethernetMonitorTmpDir""apDefaultList" `sed -n '1p' "$ethernetMonitorTmpDir""wifiIp"`
+findResult=`grep -v "^$" "$ethernetMonitorTmpDir""apDefaultList"`
+if [ -z "$findResult" ];then
+	echo "$1"":not get default ap!"
+	rm "$ethernetMonitorTmpDir""result" -rf
+	rm "$ethernetMonitorTmpDir""apList" -rf
+	rm "$ethernetMonitorTmpDir""apDefaultList" -rf
+	rm "$ethernetMonitorTmpDir""wifiIp" -rf	
+	exit 0
+fi
+#对默认连接SSID进行现场校正
+ifconfig | grep ra0 > /tmp/huangbc
+test_huangbc=`grep ra0 /tmp/huangbc`
+if [ -z "$test_huangbc" ];then
+    echo down 4
+fi
+"$ethernetGetWifiApListCmd" "$ethernetMonitorTmpDir""apList" "$1"
+findResult=`grep -v "^$" "$ethernetMonitorTmpDir""apList"`
+if [ -z "$findResult" ];then
+	echo "$1"":not find ap!"
+	rm "$ethernetMonitorTmpDir""result" -rf
+	rm "$ethernetMonitorTmpDir""apList" -rf
+	rm "$ethernetMonitorTmpDir""apDefaultList" -rf
+	rm "$ethernetMonitorTmpDir""wifiIp" -rf	
+	exit 0
+fi
+#进行自动侦测连接默认AP
+ifconfig | grep ra0 > /tmp/huangbc
+test_huangbc=`grep ra0 /tmp/huangbc`
+if [ -z "$test_huangbc" ];then
+    echo down 5
+fi
+count=`sed -n '1p' "$ethernetMonitorTmpDir""apDefaultList"`
+echo $count
+for i in `seq "$count"`;do
+	cmdParams=`sed -n '$p' "$ethernetMonitorTmpDir""apDefaultList"`
+	sed -i '$d' "$ethernetMonitorTmpDir""apDefaultList"
+	if [ -n "$cmdParams" ];then
+		#进行校正操作
+		macAddr=`echo "$cmdParams"|cut -d"," -f "2"`
+		echo $macAddr
+		findResult=`grep "$macAddr" "$ethernetMonitorTmpDir""apList"`
+		if [ -n "$findResult" ];then
+			#"$ethernetWifiConnectCmd" "$ethernetMonitorTmpDir""result" "$1" `echo "$cmdParams"|sed "/,/ s// /g"`
+			tempCmd=`echo "\"$cmdParams\""|sed "s/,/\" \"/g"`
+			eval "$ethernetWifiConnectCmd" "$ethernetMonitorTmpDir""result" "$1" "$tempCmd"
+			if [ -s "$ethernetMonitorTmpDir""result" ];then
+				findResult=`grep "ok" "$ethernetMonitorTmpDir""result"`
+				if [ -n "$findResult" ];then				
+					break
+				fi
+			fi
+		else
+			echo "$macAddr"":this ap not exist"
+		fi
+	fi
+done
+rm "$ethernetMonitorTmpDir""result" -rf
+rm "$ethernetMonitorTmpDir""apList" -rf
+rm "$ethernetMonitorTmpDir""apDefaultList" -rf
+rm "$ethernetMonitorTmpDir""wifiIp" -rf	
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

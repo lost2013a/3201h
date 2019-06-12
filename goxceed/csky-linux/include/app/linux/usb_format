@@ -1,0 +1,8 @@
+#!/bin/sh
+FILE=$1
+echo "mkfs.vfat $FILE"
+mount | grep $FILE | awk '{print "mkfs.vfat "$1";sync;umount "$3";sync;mount "$1" "$3";sync"}' >> /tmp/_tmp_usb_format.sh
+sync
+cat /tmp/_tmp_usb_format.sh
+sh /tmp/_tmp_usb_format.sh
+rm -f /tmp/_tmp_usb_format.sh

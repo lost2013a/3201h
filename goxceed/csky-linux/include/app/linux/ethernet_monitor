@@ -1,0 +1,107 @@
+#!/bin/sh
+#$1 start or stop
+version="ethernet_monitor:v1.0\n"
+helpContent="Parameter1:start or stop (0--stop or 1--start or 2--start when system poweron)\nexample:\nethernet_monitor 0\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+ethernetMonitor4WifiConnectCmdHead="ethernet_monitor4wifi_connect"		
+ethernetMonitorTmpDir="/tmp/ethernet/monitor/"
+ethernetManualTmpDir="/tmp/ethernet/manual/"
+ethernetLocalDir="/home/gx/local/ethernet/"
+ethernetMonitorCmd="ethernet_monitor"
+ethernetGetIpCmd="ethernet_get_ip4monitor"
+ethernetCfgIpCmd="ethernet_cfg_ip"
+ethernetInterfaceCheckCmd="ethernet_interface_check"
+
+mkdir -p "$ethernetMonitorTmpDir"
+#删除可能存在的临时文件
+rm "$ethernetMonitorTmpDir""sh" -rf
+rm "$ethernetMonitorTmpDir""dev" -rf
+rm "$ethernetMonitorTmpDir""result" -rf
+mode=""
+ip=""
+mac=""
+netmask=""
+gateway=""
+dns=""
+timeDelay="10"
+if [ "$1" = "0" ];then
+	#关闭网络监控线程
+	echo "#!/bin/sh" > "$ethernetMonitorTmpDir""sh"
+	psLogs=`ps`
+	echo "$psLogs"|grep "ethernet_monitor 2\|ethernet_monitor 3\|ethernet_monitor4wifi_connect\|ethernet_get_dev_list\|ethernet_get_ip\|ethernet_get_wifi_ap_list\|ethernet_get_ap_info\|ethernet_get_connect_status\|ethernet_wifi_connect\|ethernet_cfg_ip\|ethernet_wifi_cfg_ip4connect\|udhcpc\|sleep\|ethernet_get_ip4monitor"|sed "/ / s///g;/"$USER"/ s//@\n/g"|grep "@"|sed "/^/ s//kill -9 /g;/@/ s///g" >> "$ethernetMonitorTmpDir""sh"	
+	echo "exit 0" >> "$ethernetMonitorTmpDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetMonitorTmpDir""sh"
+	"$ethernetMonitorTmpDir""sh"
+	#删除与网络相关的所有临时文件
+	rm "$ethernetManualTmpDir"* -rf
+	rm "$ethernetMonitorTmpDir"* -rf
+	exit 0
+fi
+if [ "$1" = "1" ];then
+	$ethernetMonitorCmd 3 &
+	exit 0
+fi
+#进入网络后台监控模式
+if [ "$1" = "2" ];then
+	#系统刚启动时进行操作
+	#配置有线网口
+	"$ethernetGetIpCmd" "$ethernetMonitorTmpDir""result" "ETH0"
+	#cmdParams=`sed "/^/ s//,/g" "$ethernetMonitorTmpDir""result"|tr -d "\n"|sed "/,/ s// /g"`
+	mac=`cat "$ethernetMonitorTmpDir""result"|sed -n '1p'`
+	mode=`cat "$ethernetMonitorTmpDir""result"|sed -n '2p'`
+	ip=`cat "$ethernetMonitorTmpDir""result"|sed -n '3p'`
+	netmask=`cat "$ethernetMonitorTmpDir""result"|sed -n '4p'`
+	gateway=`cat "$ethernetMonitorTmpDir""result"|sed -n '5p'`
+	dns=`cat "$ethernetMonitorTmpDir""result"|sed -n '6p'`
+	#"$ethernetCfgIpCmd" "$ethernetMonitorTmpDir""result" "ETH0" "$cmdParams"
+	"$ethernetCfgIpCmd" "/tmp/ethernet/ethernet_status" "ETH0" "$mac" "$mode" "$ip" "$netmask" "$gateway" "$dns"
+	#读取WIFI插入网口列表
+	iwconfig|grep -v "^ \|^$"|sed "/^/ s//@@/g;/ / s//\n/g"|grep "^@@"|sed "/@@ra/ s//WIFI/g" > "$ethernetMonitorTmpDir""dev"	
+	if [ -s "$ethernetMonitorTmpDir""dev" ];then	
+		echo "#!/bin/sh" > "$ethernetMonitorTmpDir""sh"
+		sed "/^/ s//"$ethernetMonitor4WifiConnectCmdHead" /g" "$ethernetMonitorTmpDir""dev" >> "$ethernetMonitorTmpDir""sh"
+		echo "exit 0" >> "$ethernetMonitorTmpDir""sh"
+		#执行动态脚本
+		chmod +x "$ethernetMonitorTmpDir""sh"
+		"$ethernetMonitorTmpDir""sh"
+		#rm "$ethernetMonitorTmpDir""sh" -rf
+	else
+		echo "no wifi connect or interface not connect good!"
+	fi
+fi
+exit 0
+eth0Flag="1"
+for i in `seq "100000"`;do
+	for j in `seq "3600"`;do
+		sleep "$timeDelay"
+		#进行有线网口监控模式
+		findReslut=`"$ethernetInterfaceCheckCmd" "eth0"|grep "up"`
+		if [ -n "$findReslut" ];then
+			if [ "$eth0Flag" = "0" ];then
+				#重新配置网络
+				"$ethernetGetIpCmd" "$ethernetMonitorTmpDir""result" "ETH0"
+				cmdParams=`sed "/^/ s//,/g" "$ethernetMonitorTmpDir""result"|tr -d "\n"|sed "/,/ s// /g"`
+				"$ethernetCfgIpCmd" "$ethernetMonitorTmpDir""result" "ETH0" "$cmdParams"
+			fi
+			eth0Flag="1"
+		else
+			eth0Flag="0"
+		fi
+		#对WIFI进行后台监控
+		#读取WIFI插入网口列表
+		iwconfig|grep -v "^ \|^$"|sed "/^/ s//@@/g;/ / s//\n/g"|grep "^@@"|sed "/@@ra/ s//WIFI/g" > "$ethernetMonitorTmpDir""dev"	
+		if [ -s "$ethernetMonitorTmpDir""dev" ];then	
+			echo "#!/bin/sh" > "$ethernetMonitorTmpDir""sh"
+			sed "/^/ s//"$ethernetMonitor4WifiConnectCmdHead" /g" "$ethernetMonitorTmpDir""dev" >> "$ethernetMonitorTmpDir""sh"
+			echo "exit 0" >> "$ethernetMonitorTmpDir""sh"
+			#执行动态脚本
+			chmod +x "$ethernetMonitorTmpDir""sh"
+			"$ethernetMonitorTmpDir""sh"
+			rm "$ethernetMonitorTmpDir""sh" -rf
+		fi
+	done
+done
+####################logs############################
+#v1.0 initial,2012-10-08 peter

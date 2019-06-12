@@ -1,0 +1,93 @@
+#!/bin/sh
+#$1 save result file
+#$2 type
+version="ethernet_get_dev_list:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:type (E--ETH or W-WIFI or N--NORMAL or A--ADVANCED)\nexample:\nethernet_get_dev_list file W\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/manual/"
+mkdir -p "$ethernetTmpDir"
+#删除可能存在的临时文件
+rm "$1" -rf
+rm "$1""_tmp" -rf
+rm "$ethernetTmpDir""tmp" -rf
+#获取各网口驱动列表
+if [ "$2" = "E" ];then
+	#获取有线网口列表
+	echo "1" > "$1""_tmp"
+	echo "ETH0" >> "$1""_tmp"
+	mv "$1""_tmp" "$1"
+	exit 0	
+fi
+#读取WIFI插入网口列表
+iwconfig|grep -v "^ \|^$" > "$ethernetTmpDir""tmp"
+if [ -z "$2" ];then
+	#获取有线、无线网口列表
+	if [ -s "$ethernetTmpDir""tmp" ];then
+		count=`cat "$ethernetTmpDir""tmp"|wc -l|tr -d "\n"`
+		count=`expr "$count" + 1`
+		echo "$count" > "$1""_tmp"
+		echo "ETH0" >> "$1""_tmp"
+		sed "/^/ s//@@/g;/ / s//\n/g" "$ethernetTmpDir""tmp"|grep "^@@"|sed "/@@ra/ s//WIFI/g" >> "$1""_tmp"
+		mv "$1""_tmp" "$1"
+	else
+		#添加默认有线网口
+		echo "1" > "$1""_tmp"
+		echo "ETH0" >> "$1""_tmp"
+		mv "$1""_tmp" "$1"
+	fi
+	rm "$ethernetTmpDir""tmp" -rf
+	exit 0
+fi
+if [ "$2" = "W" ];then
+	#获取无线网口列表
+	if [ -s "$ethernetTmpDir""tmp" ];then
+		count=`cat "$ethernetTmpDir""tmp"|wc -l|tr -d "\n"`
+		echo "$count" > "$1""_tmp"
+		sed "/^/ s//@@/g;/ / s//\n/g" "$ethernetTmpDir""tmp"|grep "^@@"|sed "/@@ra/ s//WIFI/g" >> "$1""_tmp"
+		mv "$1""_tmp" "$1"
+	else
+		echo "0" > "$1"
+	fi
+	rm "$ethernetTmpDir""tmp" -rf
+	exit 0	
+fi
+if [ "$2" = "A" ];then
+	#获取IP高级配置时的列表
+	if [ -s "$ethernetTmpDir""tmp" ];then
+		count=`cat "$ethernetTmpDir""tmp"|wc -l|tr -d "\n"`
+		count=`expr "$count" + 1`
+		echo "$count" > "$1""_tmp"
+		echo "ETH0" >> "$1""_tmp"
+		sed "/^/ s//@@/g;/ / s//\n/g" "$ethernetTmpDir""tmp"|grep "^@@"|sed "/@@ra/ s//WIFI/g" >> "$1""_tmp"
+		mv "$1""_tmp" "$1"
+	else
+		#添加默认有线网口
+		echo "1" > "$1""_tmp"
+		echo "ETH0" >> "$1""_tmp"
+		mv "$1""_tmp" "$1"
+	fi
+	rm "$ethernetTmpDir""tmp" -rf
+	exit 0	
+fi
+
+if [ "$2" = "N" ];then
+	#获取IP高级配置时的列表
+	if [ -s "$ethernetTmpDir""tmp" ];then
+		echo "2" > "$1""_tmp"
+		echo "ETH0" >> "$1""_tmp"
+		echo "WIFI-ALL" >> "$1""_tmp"
+		mv "$1""_tmp" "$1"
+	else
+		#添加默认有线网口
+		echo "1" > "$1""_tmp"
+		echo "ETH0" >> "$1""_tmp"
+		mv "$1""_tmp" "$1"
+	fi
+	rm "$ethernetTmpDir""tmp" -rf
+	exit 0	
+fi
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

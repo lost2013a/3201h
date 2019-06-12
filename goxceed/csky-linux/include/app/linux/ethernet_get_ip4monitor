@@ -1,0 +1,129 @@
+#!/bin/sh
+#$1 save result file
+#$2 dev
+version="ethernet_get_ip4monitor:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:dev\nexample:\nethernet_get_ip4monitor file WIFI0\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$2" ];then	printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/monitor/"
+ethernetLocalDir="/home/gx/local/ethernet/"
+mkdir -p "$ethernetTmpDir"
+mkdir -p "$ethernetLocalDir"
+#删除可能存在的临时文件
+rm "$1" -rf
+rm "$1""_tmp" -rf
+rm "$ethernetTmpDir""tmp" -rf
+ip=""
+dns=""
+mode=""
+netmask=""
+gateway=""
+dev=`echo "$2"|sed "/^WIFI/ s//ra/g;/^ETH/ s//eth/g"`
+findResult=`echo "$dev"|grep "eth"`
+#获取当前dev的MAC地址
+ifconfig "$dev" up
+devMacAddress=`ifconfig|grep "^$dev"|grep "HWaddr"|sed "/HWaddr/ s//\nHWaddr/g;/ / s///g"|grep "HWaddr"|sed "/HWaddr/ s///g"`
+if [ -z "$devMacAddress" ];then
+	echo "$2"":interface not connect good!"
+	echo "" > "$1"
+	exit 0
+fi
+#获取有线端口的配置信息
+echo "$devMacAddress" > "$1""_tmp"
+if [ -n "$findResult" ];then	
+	if [ -s "$ethernetLocalDir""ethernet_cfg" ];then
+		findResult=`grep "^$2" "$ethernetLocalDir""ethernet_cfg"|sed "/,/ s//\n/g"`
+		if [ -n "$findResult" ];then
+			#获取配置模式
+			mode=`echo "$findResult"|sed -n '2p'`
+			ip=`echo "$findResult"|sed -n '3p'`
+			netmask=`echo "$findResult"|sed -n '4p'`
+			gateway=`echo "$findResult"|sed -n '5p'`
+			dns=`echo "$findResult"|sed -n '6p'`
+		else
+			mode="1"
+			echo "$2"",1,,,," >> "$ethernetLocalDir""ethernet_cfg"			
+		fi
+	else
+		mode="1"
+		echo "$2"",1,,,," > "$ethernetLocalDir""ethernet_cfg"
+	fi	
+#	echo "$mode"" ""$ip"" ""$netmask"" ""$gateway"" ""$dns" >> "$1""_tmp"	
+	echo "$mode" >> "$1""_tmp"
+	echo "$ip" >> "$1""_tmp"	
+	echo "$netmask" >> "$1""_tmp"	
+	echo "$gateway" >> "$1""_tmp"	
+	echo "$dns" >> "$1""_tmp"
+#	echo "$mode" >> "$1""_tmp"
+#	if [ "$mode" = "0" ];then 
+#		echo "$ip" >> "$1""_tmp"	
+#		echo "$netmask" >> "$1""_tmp"	
+#		echo "$gateway" >> "$1""_tmp"	
+#		echo "$dns" >> "$1""_tmp"
+#	else
+#		echo "192.168.1.88" >> "$1""_tmp"	
+#		echo "255.255.255.0" >> "$1""_tmp"	
+#		echo "192.168.1.1" >> "$1""_tmp"	
+#		echo "192.168.1.1" >> "$1""_tmp"	
+#	fi
+	mv "$1""_tmp" "$1"
+	exit 0
+else
+	if [ -s "$ethernetLocalDir""ethernet_cfg" ];then
+		findResult=`grep "^$devMacAddress" "$ethernetLocalDir""ethernet_cfg"|sed "/,/ s//\n/g"`
+		if [ -n "$findResult" ];then
+			#获取配置模式
+			mode=`echo "$findResult"|sed -n '2p'`
+			ip=`echo "$findResult"|sed -n '3p'`
+			netmask=`echo "$findResult"|sed -n '4p'`
+			gateway=`echo "$findResult"|sed -n '5p'`
+			dns=`echo "$findResult"|sed -n '6p'`
+		else
+			#获取WIFI全局配置
+			findResult=`grep "WIFI-ALL" "$ethernetLocalDir""ethernet_cfg"|sed "/,/ s//\n/g"`
+			if [ -n "$findResult" ];then
+				#获取配置模式
+				mode=`echo "$findResult"|sed -n '2p'`
+				ip=`echo "$findResult"|sed -n '3p'`
+				netmask=`echo "$findResult"|sed -n '4p'`
+				gateway=`echo "$findResult"|sed -n '5p'`
+				dns=`echo "$findResult"|sed -n '6p'`
+				echo "$devMacAddress"",""$mode"",""$ip"",""$netmask"",""$gateway"",""$dns" >> "$ethernetLocalDir""ethernet_cfg"
+			else
+				#添加默认全局和该dev配置
+				echo "$devMacAddress"",1,,,," >> "$ethernetLocalDir""ethernet_cfg"
+				echo "WIFI-ALL"",1,,,," >> "$ethernetLocalDir""ethernet_cfg"
+				mode="1"
+			fi
+		fi
+	else
+		echo "$devMacAddress"",1,,,," > "$ethernetLocalDir""ethernet_cfg"
+		echo "WIFI-ALL"",1,,,," >> "$ethernetLocalDir""ethernet_cfg"
+		mode="1"
+	fi
+#	echo "$mode"" ""$ip"" ""$netmask"" ""$gateway"" ""$dns" >> "$1""_tmp"	
+	echo "$mode" >> "$1""_tmp"
+	echo "$ip" >> "$1""_tmp"	
+	echo "$netmask" >> "$1""_tmp"	
+	echo "$gateway" >> "$1""_tmp"	
+	echo "$dns" >> "$1""_tmp"
+#	echo "$mode" >> "$1""_tmp"
+#	if [ "$mode" = "0" ];then 
+#		echo "$ip" >> "$1""_tmp"	
+#		echo "$netmask" >> "$1""_tmp"	
+#		echo "$gateway" >> "$1""_tmp"	
+#		echo "$dns" >> "$1""_tmp"
+#	else
+#		echo "192.168.1.88" >> "$1""_tmp"	
+#		echo "255.255.255.0" >> "$1""_tmp"	
+#		echo "192.168.1.1" >> "$1""_tmp"	
+#		echo "192.168.1.1" >> "$1""_tmp"	
+#	fi
+	mv "$1""_tmp" "$1"
+	exit 0
+fi
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

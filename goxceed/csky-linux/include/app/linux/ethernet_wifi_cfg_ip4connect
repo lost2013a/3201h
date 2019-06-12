@@ -1,0 +1,171 @@
+#!/bin/sh
+#$1 save result file
+#$2 dev
+#$3 mac address
+Timeout="10"
+version="ethernet_wifi_cfg_ip4connect:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:dev\nParameter3:mac address\nexample:\nethernet_wifi_cfg_ip4connect file WIFI0 E8:4E:06:06:13:CC\n"
+resolvFile="/home/gx/resolv.conf"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$2" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$3" ];then	printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/manual/"
+ethernetTmpDirHead="\/tmp\/ethernet\/manual\/"
+ethernetLocalDir="/home/gx/local/ethernet/"
+mkdir -p "$ethernetTmpDir"
+mkdir -p "$ethernetLocalDir"
+#删除可能存在的临时文件
+rm "$1""_tmp" -rf
+rm "$ethernetTmpDir""sh" -rf
+rm "$ethernetTmpDir""logs"* -rf
+rm "$ethernetTmpDir""dns" -rf
+rm "$ethernetTmpDir""router" -rf
+rm "$ethernetTmpDir""tmp" -rf
+#查询数据库获得该dev的配置模式
+if [ -s "$ethernetLocalDir""ethernet_cfg" ];then
+	findResult=`grep "^$3" "$ethernetLocalDir""ethernet_cfg"|sed "/,/ s//\n/g"`
+	if [ -n "$findResult" ];then
+		#获取配置模式
+		mode=`echo "$findResult"|sed -n '2p'`
+		ip=`echo "$findResult"|sed -n '3p'`
+		netmask=`echo "$findResult"|sed -n '4p'`
+		gateway=`echo "$findResult"|sed -n '5p'`
+		dns=`echo "$findResult"|sed -n '6p'`
+	else
+		#获取WIFI全局配置
+		findResult=`grep "WIFI-ALL" "$ethernetLocalDir""ethernet_cfg"|sed "/,/ s//\n/g"`
+		if [ -n "$findResult" ];then
+			#获取配置模式
+			mode=`echo "$findResult"|sed -n '2p'`
+			ip=`echo "$findResult"|sed -n '3p'`
+			netmask=`echo "$findResult"|sed -n '4p'`
+			gateway=`echo "$findResult"|sed -n '5p'`
+			dns=`echo "$findResult"|sed -n '6p'`
+			echo "$3"",""$mode"",""$ip"",""$netmask"",""$gateway"",""$dns" >> "$ethernetLocalDir""ethernet_cfg"
+		else
+			#添加默认全局和该dev配置
+			echo "$3"",1,,,," >> "$ethernetLocalDir""ethernet_cfg"
+			echo "WIFI-ALL"",1,,,," >> "$ethernetLocalDir""ethernet_cfg"
+			mode="1"
+		fi
+	fi
+else
+	echo "$3"",1,,,," > "$ethernetLocalDir""ethernet_cfg"
+	echo "WIFI-ALL"",1,,,," >> "$ethernetLocalDir""ethernet_cfg"
+	mode="1"
+fi
+#dev标号进行转换
+dev=`echo "$2"|sed "/^WIFI/ s//ra/g;/^ETH/ s//eth/g"`
+#保存原先dns和router
+route -n > "$ethernetTmpDir""router"
+if [ -s "$resolvFile" ];then
+	cat "$resolvFile" > "$ethernetTmpDir""dns"
+fi		
+if [ "$mode" = "0" ];then
+	echo "static"
+	#生成动态可执行脚本
+	echo "#!/bin/sh" > "$ethernetTmpDir""sh"
+	#删除路由表命令
+	cat "$ethernetTmpDir""router"
+	grep "$dev" "$ethernetTmpDir""router"|sed "/^/ s//#/g"|sed "/ / s//\n/g"|grep -v "^$"|sed "/^/ s//@/g"|tr -d "\n"|sed "/@#/ s//\n/g;/@/ s//,/g"|sed '1d'|cut -d"," -f "1,3,8"|sed "/^/ s//route del -net /g;/,ra/ s// dev ra/g;// s/,/ netmask /g" >> "$ethernetTmpDir""sh"
+	#添加新路由表命令	
+	Destination=`echo "$gateway"|cut -d"." -f "1-3"|sed "/$/ s//.0/g"`
+	echo "route add -net ""$Destination"" netmask ""$netmask"" dev ""$dev" >> "$ethernetTmpDir""sh"
+	#配置IP
+	echo "ifconfig ""$dev"" ""$ip"" netmask ""$netmask"  >> "$ethernetTmpDir""sh"	
+	#添加默认路由表命令
+	echo "route add default gw ""$gateway"" dev ""$dev" >> "$ethernetTmpDir""sh"			
+	echo "exit 0" >> "$ethernetTmpDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpDir""sh"
+	"$ethernetTmpDir""sh"
+	#更新DNS
+	echo "nameserver ""$dns" >> "$ethernetTmpDir""dns"
+	cat "$ethernetTmpDir""dns"|awk '!a[$0]++' > "$resolvFile"
+	rm "$ethernetTmpDir""sh" -rf
+	rm "$ethernetTmpDir""dns" -rf
+	rm "$ethernetTmpDir""router" -rf
+	rm "$ethernetTmpDir""tmp" -rf
+	rm "$ethernetTmpDir""logs"* -rf
+	echo "ok" > "$1""_tmp"
+	echo "$3" >> "$1""_tmp"
+	echo "$ip" >> "$1""_tmp"
+	mv "$1""_tmp" "$1"
+else
+	echo "dhcp"
+	#生成动态可执行脚本
+	echo "#!/bin/sh" > "$ethernetTmpDir""sh"
+	#删除路由表命令
+	grep "$dev" "$ethernetTmpDir""router"|sed "/^/ s//#/g"|sed "/ / s//\n/g"|grep -v "^$"|sed "/^/ s//@/g"|tr -d "\n"|sed "/@#/ s//\n/g;/@/ s//,/g"|sed '1d'|cut -d"," -f "1,3,8"|sed "/^/ s//route del -net /g;/,ra/ s// dev ra/g;// s/,/ netmask /g" >> "$ethernetTmpDir""sh"		
+	echo "exit 0" >> "$ethernetTmpDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpDir""sh"
+	"$ethernetTmpDir""sh"
+	rm "$ethernetTmpDir""sh" -rf
+	#生成动态可执行脚本
+	echo "#!/bin/sh" > "$ethernetTmpDir""sh"
+	echo "udhcpc -b -n -q -i ""$dev"" > ""$ethernetTmpDir""logs" > "$ethernetTmpDir""sh"
+	echo "exit 0" >> "$ethernetTmpDir""sh"
+	#执行动态脚本
+	chmod +x "$ethernetTmpDir""sh"
+	"$ethernetTmpDir""sh"
+	#查询dhcp状态
+	for i in `seq "$Timeout"`;do
+		sleep 1
+		finishResult=`grep "No lease\|Lease of" "$ethernetTmpDir""logs"*`
+		if [ -n "$finishResult" ];then
+			finishCount=`echo "$finishResult"|grep -c "No lease\|Lease of"|grep ":0"`
+			if [ -z "$finishCount" ];then
+				finishResult=`echo "$finishResult"|grep "Lease of"`
+				if [ -n "$finishResult" ];then
+					echo "configure ok!"
+					configFlag="1"
+					break
+				else
+					echo "dhcp fail!"
+					break
+				fi
+			fi
+		fi
+	done		
+	#kill掉所有的dhcp运行进程
+	psLogs=`ps`	
+	findResult=`echo "$psLogs"|grep "udhcpc"|grep " -i "`
+	if [ -n "$findResult" ];then killall udhcpc;fi
+	if [ "$configFlag" = "1" ];then
+		grep "Adding DNS server" "$ethernetTmpDir""logs"*|sed "/Adding DNS server/ s//\ndns/g"|grep "dns"|sed "/ / s///g;/dns/ s//nameserver /g" >> "$ethernetTmpDir""dns"
+		#更新dns列表
+		cat "$ethernetTmpDir""dns"|awk '!a[$0]++' > "$resolvFile"			
+	fi
+	rm "$ethernetTmpDir""sh" -rf
+	rm "$ethernetTmpDir""dns" -rf
+	rm "$ethernetTmpDir""router" -rf
+	rm "$ethernetTmpDir""tmp" -rf
+	if [ "$configFlag" = "1" ];then
+		ip=`ifconfig $dev |grep 'inet addr'|cut -f 2 -d ':'|cut -f 1 -d ' '`
+		netmask=`ifconfig $dev |grep 'inet addr'|cut -f 4 -d ':'`
+		gateway=`cat "$ethernetTmpDir""logs" |grep "Adding router"|cut -f 3 -d ' '`
+		dns=`sed -n '1p' "$resolvFile" |cut -f 2 -d ' '`
+		if [ -s "$ethernetLocalDir""ethernet_cfg" ];then
+			line=`grep -n "$3" "$ethernetLocalDir""ethernet_cfg"|sed "/:/ s//\n/g"|sed -n '1p' `
+			if [ -n "$line" ];then
+				#替换原先配置
+				replace="$3"",""1"",""$ip"",""$netmask"",""$gateway"",""$dns"
+				sed -i "$line"c"$replace" "$ethernetLocalDir""ethernet_cfg"
+			else
+				echo "$3"",""1"",""$ip"",""$netmask"",""$gateway"",""$dns" >> "$ethernetLocalDir""ethernet_cfg"
+			fi
+		else
+			echo "$3"",""1"",""$ip"",""$netmask"",""$gateway"",""$dns" > "$ethernetLocalDir""ethernet_cfg"
+		fi		
+		echo "ok" > "$1"
+	else
+		echo "fail" > "$1"
+	fi
+	rm "$ethernetTmpDir""logs"* -rf
+fi
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

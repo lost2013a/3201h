@@ -1,0 +1,70 @@
+#!/bin/sh
+#$1 save result file
+#$2 dev
+version="ethernet_get_connect_status:v1.0\n"
+helpContent="Parameter1:save result file\nParameter2:dev\nexample:\nethernet_get_connect_status file WIFI0\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+if [ -z "$1" ];then	printf "$helpContent";exit 0;fi
+if [ -z "$2" ];then	printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/manual/"
+ethernetLocalDir="/home/gx/local/ethernet/"	
+
+mkdir -p "$ethernetTmpDir"
+mkdir -p "$ethernetLocalDir"
+#删除可能存在的临时文件
+rm "$1" -rf
+rm "$1""_tmp" -rf
+rm "$ethernetTmpDir""tmp" -rf
+rm "$ethernetTmpDir""status" -rf
+dev=`echo "$2"|sed "/^WIFI/ s//ra/g;/^ETH/ s//eth/g"`
+#查询当前dev是否存在
+findResult=`iwconfig|grep -c "^"$dev""`
+if [ "$findResult" = "0" ];then
+	echo "" > "$1"
+	echo "$2"":not connect good!"
+	exit 0
+else
+	#判断是否为有线
+	findResult=`echo "$dev"|grep "eth"`
+	if [ -n "$findResult" ];then
+		echo "eth0 get status!"
+		echo "" > "$1"
+		exit 0
+	fi
+	iwconfig "$dev"|sed "/ESSID:\"/ s//\n@ESSID/g;/Access Point: / s//\n@MAC/g;/Encryption key:/ s//\n@key/g;/\"/ s//\n/g;"|grep "@"|sed "s/^@ESSID//g;s/^@key//g;s/^@MAC//g;" > "$ethernetTmpDir""status"
+	#进行连接状态匹配判断	
+	if [ -s "$ethernetTmpDir""status" ];then
+		count=`cat "$ethernetTmpDir""status"|wc -l`
+		if [ "$count" -gt "2" ];then
+			ssid=`sed -n '1p' "$ethernetTmpDir""status"|tr -d "\r"`
+			mac=`sed -n '2p' "$ethernetTmpDir""status"|tr -d "\r"`
+			findResult=`grep "Not-Associated" "$ethernetTmpDir""status"`
+			if [ -z "$findResult" ];then
+				ip=`ifconfig "$dev"|grep "inet addr:"|sed "/inet addr:/ s//\nip/g;/ / s//\n/g"|grep "ip"|sed "/ip/ s///g"`
+				if [ -n "$ip" ];then
+					echo "$mac" > "$1""_tmp"					
+					echo "$ip" >> "$1""_tmp"
+					#echo "$ssid" >> "$1""_tmp"
+					rm "$ethernetTmpDir""status" -rf
+					rm "$ethernetTmpDir""tmp" -rf
+					mv "$1""_tmp" "$1"
+					#echo "$ssid"":""$mac"
+				else
+					rm "$ethernetTmpDir""status" -rf
+					rm "$ethernetTmpDir""tmp" -rf
+					echo "" > "$1"
+				fi
+				exit 0	
+			fi
+		fi
+	fi
+	echo "" > "$1"
+	echo "$dev"":not connect wifi AP!"
+	rm "$ethernetTmpDir""status" -rf
+	rm "$ethernetTmpDir""tmp" -rf
+	exit 0		
+fi
+exit 0
+####################logs############################
+#v1.0 initial,2012-10-08 peter

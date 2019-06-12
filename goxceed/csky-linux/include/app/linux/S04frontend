@@ -1,0 +1,26 @@
+#!/bin/sh
+demod_enum=2
+demod_i2c_id=0
+demod_i2c_chipaddr=0x80
+tuner_type=62
+tuner_i2c_id=0
+tuner_i2c_chipaddr=0xc0
+demod_cfg=1
+tuner_cfg=0
+
+case "$1" in
+    start)
+        if [ ! -c /dev/dvb0.frontend0 ]; then
+            echo "Install frontend driver..."
+		modprobe fe num=1 profile="|$demod_enum:$demod_i2c_id:$demod_i2c_chipaddr:$tuner_type:$tuner_i2c_id:$tuner_i2c_chipaddr:&$demod_cfg:$tuner_cfg"
+        fi
+        ;;
+    stop)
+        ;;
+    restart|reload)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+

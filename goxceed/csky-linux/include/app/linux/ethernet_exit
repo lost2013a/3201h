@@ -1,0 +1,14 @@
+#!/bin/sh
+##############################################################
+version="ethernet_exit:v1.0\n"
+helpContent="example:\nethernet_exit\n"
+if [ "$1" = "--version" ];then printf "$version";exit 0;fi
+if [ "$1" = "--help" ];then printf "$helpContent";exit 0;fi
+ethernetTmpDir="/tmp/ethernet/manual/"
+
+#删除可能存在的临时文件
+mkdir -p "$ethernetTmpDir"
+cd "$ethernetTmpDir"
+rm -rf *
+####################logs############################
+#v1.0 initial 2012-10-08 peter
